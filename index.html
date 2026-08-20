@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<!--
+  すべあな歌詞落としジェネレーター
+  Copyright (c) 2026 priusup
+  Released under the MIT License.
+  https://github.com/priusup/sban-kashiotoshi-generator
+-->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>すべあな歌詞落としジェネレーター</title>
+    <!-- 物理演算エンジン Matter.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <!-- デフォルトフォント Noto Sans JP -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4a90e2;
+            --bg-dark: #121212;
+            --text-light: #ebebeb;
+            --panel-bg: #1e1e1e;
+        }
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; font-family: 'Noto Sans JP', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', sans-serif;
+            background-color: var(--bg-dark); color: var(--text-light);
+        }
+        /* 設定画面UI */
+        #settings-ui {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(18, 18, 18, 0.95); z-index: 100;
+            display: flex; flex-direction: column; padding: 20px; box-sizing: border-box;
+            overflow-y: auto;
+        }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
+        .header h1 { margin: 0; font-size: 1.5rem; }
+        .controls { display: flex; gap: 8px; flex-wrap: wrap; }
+        .setting-group { background: var(--panel-bg); padding: 15px; margin-bottom: 15px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .setting-group h2 { margin-top: 0; font-size: 1.1rem; border-bottom: 1px solid #444; padding-bottom: 5px; display: flex; justify-content: space-between; align-items: center;}
+        .row { display: flex; align-items: flex-start; margin-bottom: 10px; flex-wrap: wrap; gap: 10px; }
+        .row > label { flex: 0 0 150px; font-weight: bold; margin-top: 5px; }
+        .input-area { flex: 1; min-width: 250px; display: flex; flex-direction: column; gap: 5px; }
+        textarea, input[type="text"], input[type="number"], select {
+            width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #555;
+            background: #2a2a2a; color: white; font-family: inherit; box-sizing: border-box;
+        }
+        textarea { resize: vertical; min-height: 60px; }
+        .checkbox-group, .radio-group { display: flex; flex-wrap: wrap; gap: 15px; }
+        .checkbox-group label, .radio-group label { display: flex; align-items: center; cursor: pointer; font-weight: normal; gap: 5px; }
+        button {
+            padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;
+            background: #333; color: white; transition: background 0.2s;
+        }
+        button:hover { background: #444; }
+        button.primary { background: var(--primary); font-size: 1.1rem; padding: 10px 24px; }
+        button.primary:hover { background: #357abd; }
+        button.reset-btn { background: transparent; border: 1px solid #555; padding: 4px 8px; font-size: 0.8rem; }
+        button.reset-btn:hover { background: #ff4d4d; border-color: #ff4d4d; }
+        
+        /* 物理演算描画エリア */
+        #play-area {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; z-index: 10;
+        }
+        .physics-char {
+            position: absolute; top: 0; left: 0;
+            transform-origin: center center; user-select: none; pointer-events: none;
+            white-space: pre; line-height: 1;
+        }
+        #back-btn {
+            position: absolute; top: 20px; left: 20px; z-index: 20; display: none;
+            background: rgba(0,0,0,0.7); border: 1px solid #fff;
+        }
+        
+        /* 計測用の見えないエリア */
+        #measure-area { position: absolute; visibility: hidden; pointer-events: none; top: -9999px; left: -9999px; }
+        
+        /* フッター・注意書き用スタイル */
+        .ai-credit {
+            text-align: center;
+            margin-top: 30px;
+            margin-bottom: 20px;
+            color: #888;
+            font-size: 0.85rem;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+
+<!-- 設定画面UI -->
+<div id="settings-ui">
+    <div class="header">
+        <h1>すべあな歌詞落としジェネレーター</h1>
+        <div class="controls">
+            <button onclick="toggleFullscreen()">全画面切替</button>
+            <button onclick="window.open('https://github.com/priusup/sban-kashiotoshi-generator', '_blank')">説明</button>
+            <button onclick="exportSettings()">設定エクスポート(JSON)</button>
+            <input type="file" id="import-json" style="display:none" accept=".json" onchange="importSettings(event)">
+            <button onclick="document.getElementById('import-json').click()">設定インポート</button>
+            <button onclick="resetAll()" style="background:#8b0000;">全リセット</button>
+            <button class="primary" onclick="startPlay()">▶ 再生</button>
+        </div>
+    </div>
+
+    <div id="settings-container">
+        <!-- JSで動的に設定項目を生成 -->
+    </div>
+
+    <!-- フッター注記 -->
+    <div class="ai-credit">
+        ※当ツールは非公式の二次創作ファンツールであり、本家様（全てあなたの所為です。）とは一切関係ございません。<br>
+        ※このツールはAI（Gemini）を使用し、作成しました。
+    </div>
+</div>
+
+<!-- 再生画面 -->
+<div id="play-area"></div>
+<button id="back-btn" onclick="stopPlay()">◀ 設定に戻る</button>
+<div id="measure-area"></div>
+
+<script>
+/**
+ * デフォルト設定
+ */
+const DEFAULT_SETTINGS = {
+    baseText: "全てあなたの所為です。",
+    fallingText: "再生すると\nこんな感じで\n歌詞が落ちてくるよ",
+    textColor: "#ebebeb",
+    bgColor: "#000000",
+    largeTypes: { kanji: true, hiragana: false, katakana: false, upper: false, lower: false, symbols: false },
+    customLargeChars: "",
+    smallRatio: 75,
+    baseScale: 60,
+    physics: { friction: 0.1, restitution: 0.2, gravity: 1.0 },
+    fontMode: "default", // default | custom
+    customFontFamily: "メイリオ",
+    fontWeight: 900
+};
+
+let currentSettings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+
+const SETTINGS_DEF = [
+    { id: 'baseText', label: '土台の文字', type: 'textarea', desc: '落ちてくる文字を受け止める文（改行可能）' },
+    { id: 'fallingText', label: '落ちてくる歌詞', type: 'textarea', desc: '上から降ってくる文（改行可能）' },
+    { id: 'textColor', label: '文字の色', type: 'color' },
+    { id: 'bgColor', label: '背景の色', type: 'color' },
+    { id: 'largeTypes', label: '大きくする文字の種類', type: 'checkboxes', 
+      options: [
+          { key: 'kanji', label: '漢字' }, { key: 'hiragana', label: '平仮名' },
+          { key: 'katakana', label: '片仮名' }, { key: 'upper', label: '英大文字' },
+          { key: 'lower', label: '英小文字' }, { key: 'symbols', label: '記号等' }
+      ]
+    },
+    { id: 'customLargeChars', label: 'カスタム文字指定', type: 'text', desc: '入力した文字も大きくなります' },
+    { id: 'smallRatio', label: 'それ以外の文字の小ささ (%)', type: 'number', min: 10, max: 100 },
+    { id: 'baseScale', label: '全体の基準サイズ (px)', type: 'number', min: 10, max: 200 },
+    { id: 'physics_restitution', label: '物理: 反発係数 (0〜1)', type: 'number', step: 0.1, min: 0, max: 1 },
+    { id: 'physics_friction', label: '物理: 摩擦係数 (0〜1)', type: 'number', step: 0.1, min: 0, max: 1 },
+    { id: 'physics_gravity', label: '物理: 重力スケール', type: 'number', step: 0.1, min: 0.1, max: 5 },
+    { 
+        id: 'fontMode', 
+        label: 'フォント選択', 
+        type: 'radio',
+        options: [
+            { value: 'default', label: 'デフォルト（Noto Sans JP Black）' },
+            { value: 'custom', label: 'カスタムフォント' }
+        ],
+        desc: '💡 フォント指定ガイド：\n' +
+              '・「デフォルト」を選択すると、自動的にGoogle Fontsから読み込まれた「Noto Sans JP Black」が適用されます。\n' +
+              '・「カスタムフォント」を使う場合は、PCにインストールされたフォント名を1つだけ・引用符（""）なしで直接入力してください（内部で自動的に引用符が適用されます）。'
+    },
+    { id: 'customFontFamily', label: 'カスタムフォント名', type: 'text', desc: '例: メイリオ / 游ゴシック / Impact / ヒラギノ角ゴシック （1つだけ・引用符なし）' },
+    { id: 'fontWeight', label: 'フォントの太さ（ウェイト）', type: 'number', min: 100, max: 900, step: 100, desc: '標準: 400, 太字: 700, 極太: 900（※フォント側が対応している必要があります）' }
+];
+
+/* 有効なfont-family文字列を取得 */
+function getEffectiveFontFamily() {
+    const emojiFallback = ", 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', sans-serif";
+    if (currentSettings.fontMode === 'default') {
+        return "'Noto Sans JP'" + emojiFallback;
+    } else {
+        // ユーザー入力をクリーンにして引用符を自動付与
+        const cleanFont = (currentSettings.customFontFamily || '').replace(/["']/g, '').trim();
+        return `"${cleanFont}"` + emojiFallback;
+    }
+}
+
+/* 有効なfont-weight（太さ）を取得 */
+function getEffectiveFontWeight() {
+    if (currentSettings.fontMode === 'default') {
+        return 900;
+    }
+    return currentSettings.fontWeight || 400;
+}
+
+/* 全画面表示切り替え */
+function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => {
+            alert(`全画面表示に対応していないブラウザか、ブロックされました: ${err.message}`);
+        });
+    } else {
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        }
+    }
+}
+
+/* 文字列を絵文字・サロゲートペア単位で正しく分解する関数 */
+function splitGraphemes(str) {
+    if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+        const segmenter = new Intl.Segmenter('ja', { granularity: 'grapheme' });
+        return Array.from(segmenter.segment(str), s => s.segment);
+    }
+    return Array.from(str);
+}
+
+function initSettingsUI() {
+    const container = document.getElementById('settings-container');
+    container.innerHTML = '';
+
+    SETTINGS_DEF.forEach(def => {
+        const group = document.createElement('div');
+        group.className = 'setting-group';
+        
+        let headerHTML = `<h2>${def.label} <button class="reset-btn" onclick="resetSetting('${def.id}')">リセット</button></h2>`;
+        let inputHTML = `<div class="row">`;
+        if (def.desc) {
+            inputHTML += `<label style="flex-basis: 100%; margin-bottom: 5px; font-weight: normal; color: #aaa; font-size: 0.85em; white-space: pre-wrap; line-height: 1.4;">${def.desc}</label>`;
+        }
+        
+        inputHTML += `<div class="input-area">`;
+        
+        let val = currentSettings[def.id];
+        if (def.id.startsWith('physics_')) val = currentSettings.physics[def.id.split('_')[1]];
+
+        if (def.type === 'textarea') {
+            inputHTML += `<textarea id="input_${def.id}" onchange="updateSetting('${def.id}', this.value)">${val}</textarea>`;
+        } else if (def.type === 'text' || def.type === 'number') {
+            const extra = def.type === 'number' ? `min="${def.min}" max="${def.max}" step="${def.step||1}"` : '';
+            inputHTML += `<input type="${def.type}" id="input_${def.id}" value="${val}" ${extra} onchange="updateSetting('${def.id}', this.value)">`;
+        } else if (def.type === 'color') {
+            inputHTML += `<input type="color" id="input_${def.id}" value="${val}" onchange="updateSetting('${def.id}', this.value)" style="height:40px; padding:0;">`;
+        } else if (def.type === 'checkbox') {
+            inputHTML += `<label><input type="checkbox" id="input_${def.id}" ${val ? 'checked' : ''} onchange="updateSetting('${def.id}', this.checked)"> 有効にする</label>`;
+        } else if (def.type === 'checkboxes') {
+            inputHTML += `<div class="checkbox-group">`;
+            def.options.forEach(opt => {
+                const checked = currentSettings.largeTypes[opt.key] ? 'checked' : '';
+                inputHTML += `<label><input type="checkbox" id="input_${def.id}_${opt.key}" ${checked} onchange="updateSetting('${def.id}_${opt.key}', this.checked)"> ${opt.label}</label>`;
+            });
+            inputHTML += `</div>`;
+        } else if (def.type === 'radio') {
+            inputHTML += `<div class="radio-group">`;
+            def.options.forEach(opt => {
+                const checked = val === opt.value ? 'checked' : '';
+                inputHTML += `<label><input type="radio" name="${def.id}" value="${opt.value}" ${checked} onchange="updateSetting('${def.id}', this.value)"> ${opt.label}</label>`;
+            });
+            inputHTML += `</div>`;
+        }
+        
+        inputHTML += `</div></div>`;
+        group.innerHTML = headerHTML + inputHTML;
+        container.appendChild(group);
+    });
+}
+
+function updateSetting(key, value) {
+    if (key.startsWith('physics_')) {
+        currentSettings.physics[key.split('_')[1]] = parseFloat(value);
+    } else if (key.startsWith('largeTypes_')) {
+        currentSettings.largeTypes[key.split('_')[1]] = value;
+    } else {
+        if (typeof currentSettings[key] === 'number') value = parseFloat(value);
+        currentSettings[key] = value;
+    }
+    saveToLocal();
+}
+
+function resetSetting(key) {
+    if (key.startsWith('physics_')) {
+        const prop = key.split('_')[1];
+        currentSettings.physics[prop] = DEFAULT_SETTINGS.physics[prop];
+    } else {
+        currentSettings[key] = JSON.parse(JSON.stringify(DEFAULT_SETTINGS[key]));
+    }
+    saveToLocal();
+    initSettingsUI();
+}
+
+function resetAll() {
+    if(confirm("全ての設定を初期化しますか？")) {
+        currentSettings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+        saveToLocal();
+        initSettingsUI();
+    }
+}
+
+function saveToLocal() { localStorage.setItem('subeana_settings', JSON.stringify(currentSettings)); }
+function loadFromLocal() {
+    const saved = localStorage.getItem('subeana_settings');
+    if (saved) {
+        try { currentSettings = { ...currentSettings, ...JSON.parse(saved) }; } catch(e) {}
+    }
+}
+
+function exportSettings() {
+    const blob = new Blob([JSON.stringify(currentSettings, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL ? URL.createObjectURL(blob) : URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'subeana_settings.json'; a.click();
+}
+
+function importSettings(e) {
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            currentSettings = { ...currentSettings, ...JSON.parse(e.target.result) };
+            saveToLocal(); initSettingsUI(); alert("インポート完了！");
+        } catch(err) { alert("JSONファイルの読み込みに失敗しました。"); }
+    };
+    reader.readAsText(file);
+}
+
+loadFromLocal();
+initSettingsUI();
+
+/* ==========================================
+ * 物理演算・アニメーション関連 (Matter.js)
+ * ========================================== */
+const Engine = Matter.Engine,
+      Render = Matter.Render,
+      Runner = Matter.Runner,
+      Bodies = Matter.Bodies,
+      Composite = Matter.Composite,
+      Events = Matter.Events;
+
+let engine, runner, render;
+let domElements = [];
+
+function isLargeChar(char) {
+    const sets = currentSettings.largeTypes;
+    if (sets.kanji && /[\u4E00-\u9FAF\u3400-\u4DBF]/.test(char)) return true;
+    if (sets.hiragana && /[\u3040-\u309F]/.test(char)) return true;
+    if (sets.katakana && /[\u30A0-\u30FF]/.test(char)) return true;
+    if (sets.upper && /[A-Z]/.test(char)) return true;
+    if (sets.lower && /[a-z]/.test(char)) return true;
+    if (sets.symbols && /[、。！？\.,!?…・「」『』【】]/.test(char)) return true;
+    if (currentSettings.customLargeChars.includes(char)) return true;
+    return false;
+}
+
+function measureChar(char, fontSize) {
+    const area = document.getElementById('measure-area');
+    const span = document.createElement('span');
+    span.style.fontFamily = getEffectiveFontFamily();
+    span.style.fontWeight = getEffectiveFontWeight();
+    span.style.fontSize = fontSize + 'px';
+    span.style.lineHeight = '1';
+    span.style.whiteSpace = 'pre';
+    span.textContent = char;
+    area.appendChild(span);
+    const rect = span.getBoundingClientRect();
+    area.innerHTML = '';
+    return { w: rect.width || fontSize, h: rect.height || fontSize };
+}
+
+function createCharBody(char, x, y, isStatic) {
+    const isLarge = isLargeChar(char);
+    const fontSize = isLarge ? currentSettings.baseScale : (currentSettings.baseScale * currentSettings.smallRatio / 100);
+    const size = measureChar(char, fontSize);
+    
+    const heightDiff = measureChar('漢', currentSettings.baseScale).h - size.h;
+    const yOffset = isLarge ? 0 : (heightDiff / 2);
+
+    const body = Bodies.rectangle(x, y + yOffset, size.w, size.h, {
+        isStatic: isStatic,
+        friction: currentSettings.physics.friction,
+        restitution: currentSettings.physics.restitution,
+        density: 0.001
+    });
+
+    const elem = document.createElement('div');
+    elem.className = 'physics-char';
+    elem.textContent = char;
+    elem.style.fontFamily = getEffectiveFontFamily();
+    elem.style.fontWeight = getEffectiveFontWeight();
+    elem.style.fontSize = fontSize + 'px';
+    elem.style.color = currentSettings.textColor;
+    elem.style.width = size.w + 'px';
+    elem.style.height = size.h + 'px';
+    elem.style.display = 'flex';
+    elem.style.alignItems = 'center';
+    elem.style.justifyContent = 'center';
+
+    document.getElementById('play-area').appendChild(elem);
+    domElements.push({ body, elem, w: size.w, h: size.h });
+
+    return { body, width: size.w, height: size.h };
+}
+
+function startPlay() {
+    document.getElementById('settings-ui').style.display = 'none';
+    const playArea = document.getElementById('play-area');
+    playArea.style.display = 'block';
+    playArea.style.backgroundColor = currentSettings.bgColor;
+    document.getElementById('back-btn').style.display = 'block';
+    
+    if (engine) {
+        Render.stop(render);
+        Runner.stop(runner);
+        Engine.clear(engine);
+        render.canvas.remove();
+        render = null;
+        engine = null;
+    }
+    playArea.querySelectorAll('.physics-char').forEach(e => e.remove());
+    domElements = [];
+
+    engine = Engine.create();
+    engine.world.gravity.y = currentSettings.physics.gravity;
+    
+    render = Render.create({
+        element: document.getElementById('measure-area'),
+        engine: engine,
+        options: { width: window.innerWidth, height: window.innerHeight, wireframes: false }
+    });
+
+    const cx = window.innerWidth / 2;
+    const cy = window.innerHeight / 2;
+
+    // 土台の文字生成 (Static)
+    const baseLines = currentSettings.baseText.split('\n');
+    let currentY = cy - ((baseLines.length - 1) * currentSettings.baseScale / 2);
+
+    baseLines.forEach(line => {
+        let lineWidth = 0;
+        const charDataList = [];
+        
+        const chars = splitGraphemes(line);
+        chars.forEach(char => {
+            const isLarge = isLargeChar(char);
+            const fontSize = isLarge ? currentSettings.baseScale : (currentSettings.baseScale * currentSettings.smallRatio / 100);
+            const size = measureChar(char, fontSize);
+            charDataList.push({ char, w: size.w });
+            lineWidth += size.w;
+        });
+
+        let startX = cx - (lineWidth / 2);
+        
+        charDataList.forEach(data => {
+            const centerCharX = startX + (data.w / 2);
+            const b = createCharBody(data.char, centerCharX, currentY, true);
+            Composite.add(engine.world, b.body);
+            startX += data.w;
+        });
+        currentY += currentSettings.baseScale * 1.2; 
+    });
+
+    // 落ちてくる文字生成 (Dynamic)
+    const fallingLines = currentSettings.fallingText.split('\n').reverse();
+    let dropY = -100;
+
+    fallingLines.forEach((line, lineIdx) => {
+        let lineWidth = 0;
+        const charDataList = [];
+        
+        const chars = splitGraphemes(line);
+        chars.forEach(char => {
+            const isLarge = isLargeChar(char);
+            const fontSize = isLarge ? currentSettings.baseScale : (currentSettings.baseScale * currentSettings.smallRatio / 100);
+            const size = measureChar(char, fontSize);
+            charDataList.push({ char, w: size.w });
+            lineWidth += size.w;
+        });
+
+        let startX = cx - (lineWidth / 2);
+        
+        charDataList.forEach(data => {
+            const centerCharX = startX + (data.w / 2);
+            const jitterX = (Math.random() - 0.5) * 20;
+            const jitterY = (Math.random() - 0.5) * 50;
+            
+            const b = createCharBody(data.char, centerCharX + jitterX, dropY + jitterY - (lineIdx * currentSettings.baseScale), false);
+            Matter.Body.setAngle(b.body, (Math.random() - 0.5) * 0.2);
+            Composite.add(engine.world, b.body);
+            startX += data.w;
+        });
+    });
+
+    Events.on(engine, 'afterUpdate', function() {
+        domElements.forEach(item => {
+            const px = item.body.position.x - (item.w / 2);
+            const py = item.body.position.y - (item.h / 2);
+            const angle = item.body.angle;
+            
+            item.elem.style.transform = `translate(${px}px, ${py}px) rotate(${angle}rad)`;
+            
+            if (!item.body.isStatic && py > window.innerHeight + 200) {
+                Matter.Composite.remove(engine.world, item.body);
+                item.elem.remove();
+            }
+        });
+    });
+
+    Render.run(render);
+    runner = Runner.create();
+    Runner.run(runner, engine);
+}
+
+function stopPlay() {
+    if (engine) {
+        Render.stop(render);
+        Runner.stop(runner);
+        Engine.clear(engine);
+    }
+    document.getElementById('play-area').style.display = 'none';
+    document.getElementById('back-btn').style.display = 'none';
+    document.getElementById('settings-ui').style.display = 'flex';
+}
+
+/* 画面サイズ変更時も再生を継続 */
+window.addEventListener('resize', () => {
+    if (render) {
+        render.options.width = window.innerWidth;
+        render.options.height = window.innerHeight;
+        if (render.canvas) {
+            render.canvas.width = window.innerWidth;
+            render.canvas.height = window.innerHeight;
+        }
+    }
+});
+</script>
+</body>
+</html>
