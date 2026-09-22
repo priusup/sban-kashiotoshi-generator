@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  すべあな歌詞落としジェネレーター
+  すべあな歌詞落としジェネレーター Ver.2
   Copyright (c) 2026 priusup
   Released under the MIT License.
   https://github.com/priusup/sban-kashiotoshi-generator
@@ -9,7 +9,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>すべあな歌詞落としジェネレーター</title>
+    <title>すべあな歌詞落としジェネレーター Ver.2</title>
     <!-- 物理演算エンジン Matter.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
     <!-- デフォルトフォント Noto Sans JP -->
@@ -34,7 +34,8 @@
             overflow-y: auto;
         }
         .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
-        .header h1 { margin: 0; font-size: 1.5rem; }
+        .header h1 { margin: 0; font-size: 1.5rem; display: flex; align-items: baseline; gap: 8px; }
+        .header h1 .version-tag { font-size: 0.85rem; color: #888; font-weight: normal; background: #2a2a2a; padding: 2px 8px; border-radius: 4px; border: 1px solid #444; }
         .controls { display: flex; gap: 8px; flex-wrap: wrap; }
         .setting-group { background: var(--panel-bg); padding: 15px; margin-bottom: 15px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
         .setting-group h2 { margin-top: 0; font-size: 1.1rem; border-bottom: 1px solid #444; padding-bottom: 5px; display: flex; justify-content: space-between; align-items: center;}
@@ -91,7 +92,7 @@
 <!-- 設定画面UI -->
 <div id="settings-ui">
     <div class="header">
-        <h1>すべあな歌詞落としジェネレーター</h1>
+        <h1>すべあな歌詞落としジェネレーター <span class="version-tag">Ver.2</span></h1>
         <div class="controls">
             <button onclick="toggleFullscreen()">全画面切替</button>
             <button onclick="window.open('https://github.com/priusup/sban-kashiotoshi-generator', '_blank')">説明</button>
@@ -109,6 +110,7 @@
 
     <!-- フッター注記 -->
     <div class="ai-credit">
+        すべあな歌詞落としジェネレーター Ver.2<br>
         ※当ツールは非公式の二次創作ファンツールであり、本家様（全てあなたの所為です。）とは一切関係ございません。<br>
         ※このツールはAI（Gemini）を使用し、作成しました。
     </div>
@@ -135,29 +137,31 @@ const DEFAULT_SETTINGS = {
     physics: { friction: 0.1, restitution: 0.2, gravity: 1.0 },
     fontMode: "default", // default | custom
     customFontFamily: "メイリオ",
-    fontWeight: 900
+    fontWeight: 900,
+    collisionMode: "tight" // tight | default
 };
 
 let currentSettings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
 
+/* 設定項目の定義（カテゴリ順に整理・説明文を洗練） */
 const SETTINGS_DEF = [
-    { id: 'baseText', label: '土台の文字', type: 'textarea', desc: '落ちてくる文字を受け止める文（改行可能）' },
-    { id: 'fallingText', label: '落ちてくる歌詞', type: 'textarea', desc: '上から降ってくる文（改行可能）' },
-    { id: 'textColor', label: '文字の色', type: 'color' },
-    { id: 'bgColor', label: '背景の色', type: 'color' },
-    { id: 'largeTypes', label: '大きくする文字の種類', type: 'checkboxes', 
+    // --- テキスト設定 ---
+    { id: 'fallingText', label: '落ちてくる歌詞', type: 'textarea', desc: '上から順番に降ってくるテキスト（改行で複数行指定）' },
+    { id: 'baseText', label: '土台の文字', type: 'textarea', desc: '画面中央で落下を受け止める固定テキスト（改行可能）' },
+    
+    // --- サイズ・強調設定 ---
+    { id: 'baseScale', label: '全体の基準サイズ (px)', type: 'number', min: 10, max: 200, desc: '標準（大きい文字）のフォントサイズ' },
+    { id: 'largeTypes', label: '大きく表示する文字種', type: 'checkboxes', 
       options: [
           { key: 'kanji', label: '漢字' }, { key: 'hiragana', label: '平仮名' },
           { key: 'katakana', label: '片仮名' }, { key: 'upper', label: '英大文字' },
           { key: 'lower', label: '英小文字' }, { key: 'symbols', label: '記号等' }
       ]
     },
-    { id: 'customLargeChars', label: 'カスタム文字指定', type: 'text', desc: '入力した文字も大きくなります' },
-    { id: 'smallRatio', label: 'それ以外の文字の小ささ (%)', type: 'number', min: 10, max: 100 },
-    { id: 'baseScale', label: '全体の基準サイズ (px)', type: 'number', min: 10, max: 200 },
-    { id: 'physics_restitution', label: '物理: 反発係数 (0〜1)', type: 'number', step: 0.1, min: 0, max: 1 },
-    { id: 'physics_friction', label: '物理: 摩擦係数 (0〜1)', type: 'number', step: 0.1, min: 0, max: 1 },
-    { id: 'physics_gravity', label: '物理: 重力スケール', type: 'number', step: 0.1, min: 0.1, max: 5 },
+    { id: 'customLargeChars', label: '個別で大きくする文字', type: 'text', desc: 'ここで入力した文字も個別に大きくなります（例: ！？★）' },
+    { id: 'smallRatio', label: '小さい文字のサイズ比率 (%)', type: 'number', min: 10, max: 100, desc: '大きさを指定していない文字の縮小率（100%で全文字同サイズ）' },
+
+    // --- フォント設定 ---
     { 
         id: 'fontMode', 
         label: 'フォント選択', 
@@ -167,11 +171,31 @@ const SETTINGS_DEF = [
             { value: 'custom', label: 'カスタムフォント' }
         ],
         desc: '💡 フォント指定ガイド：\n' +
-              '・「デフォルト」を選択すると、自動的にGoogle Fontsから読み込まれた「Noto Sans JP Black」が適用されます。\n' +
-              '・「カスタムフォント」を使う場合は、PCにインストールされたフォント名を1つだけ・引用符（""）なしで直接入力してください（内部で自動的に引用符が適用されます）。'
+              '・「デフォルト」: WEBフォント（Noto Sans JP ExtraBold/Black相当）が適用されます。\n' +
+              '・「カスタムフォント」: お使いのPC/スマホにインストールされているフォント名を1つだけ指定できます（引用符 "" は自動付与されます）。'
     },
-    { id: 'customFontFamily', label: 'カスタムフォント名', type: 'text', desc: '例: メイリオ / 游ゴシック / Impact / ヒラギノ角ゴシック （1つだけ・引用符なし）' },
-    { id: 'fontWeight', label: 'フォントの太さ（ウェイト）', type: 'number', min: 100, max: 900, step: 100, desc: '標準: 400, 太字: 700, 極太: 900（※フォント側が対応している必要があります）' }
+    { id: 'customFontFamily', label: 'カスタムフォント名', type: 'text', desc: '例: メイリオ / 游ゴシック / Impact / ヒラギノ角ゴ ProN （引用符なしで入力）' },
+    { id: 'fontWeight', label: 'フォントの太さ (Weight)', type: 'number', min: 100, max: 900, step: 100, desc: '標準: 400, 太字: 700, 極太: 900（フォント側が対応している必要があります）' },
+
+    // --- カラー設定 ---
+    { id: 'textColor', label: '文字の色', type: 'color' },
+    { id: 'bgColor', label: '背景の色', type: 'color' },
+
+    // --- 物理・当たり判定 ---
+    { 
+        id: 'collisionMode', 
+        label: '当たり判定（コリジョン）', 
+        type: 'radio',
+        options: [
+            { value: 'tight', label: 'タイト（余白カット四角枠）' },
+            { value: 'default', label: '標準（フォント本来の四角枠）' }
+        ],
+        desc: '・タイト: 実際の文字描画領域に合わせて四角い枠をギリギリまで切り詰めます。句読点などの大きな余白が取り除かれて隙間なく詰まります。（※文字の線に沿った複雑な多角形ではなく、できるだけ小さく切り取った「四角枠」での判定です）\n' +
+              '・標準: フォントが元々持っている正方形に近い標準枠（余白を含む）で判定します。'
+    },
+    { id: 'physics_gravity', label: '物理: 重力スケール', type: 'number', step: 0.1, min: 0.1, max: 5, desc: '文字が落下するスピード（数値が大きいほど高速）' },
+    { id: 'physics_restitution', label: '物理: 反発係数 (0〜1)', type: 'number', step: 0.1, min: 0, max: 1, desc: '跳ね返りの強さ（0でピタッと止まり、1で弾む）' },
+    { id: 'physics_friction', label: '物理: 摩擦係数 (0〜1)', type: 'number', step: 0.1, min: 0, max: 1, desc: 'すべりにくさ（数値が大きいほど文字同士が引っかかります）' }
 ];
 
 /* 有効なfont-family文字列を取得 */
@@ -180,7 +204,6 @@ function getEffectiveFontFamily() {
     if (currentSettings.fontMode === 'default') {
         return "'Noto Sans JP'" + emojiFallback;
     } else {
-        // ユーザー入力をクリーンにして引用符を自動付与
         const cleanFont = (currentSettings.customFontFamily || '').replace(/["']/g, '').trim();
         return `"${cleanFont}"` + emojiFallback;
     }
@@ -341,6 +364,10 @@ const Engine = Matter.Engine,
 let engine, runner, render;
 let domElements = [];
 
+/* キャンバスを用いたタイト判定用のオフスクリーンCanvas */
+const measureCanvas = document.createElement('canvas');
+const measureCtx = measureCanvas.getContext('2d', { willReadFrequently: true });
+
 function isLargeChar(char) {
     const sets = currentSettings.largeTypes;
     if (sets.kanji && /[\u4E00-\u9FAF\u3400-\u4DBF]/.test(char)) return true;
@@ -365,7 +392,59 @@ function measureChar(char, fontSize) {
     area.appendChild(span);
     const rect = span.getBoundingClientRect();
     area.innerHTML = '';
-    return { w: rect.width || fontSize, h: rect.height || fontSize };
+
+    const defaultW = rect.width || fontSize;
+    const defaultH = rect.height || fontSize;
+
+    if (currentSettings.collisionMode === 'default') {
+        return { w: defaultW, h: defaultH, offX: 0, offY: 0, isTight: false };
+    }
+
+    // タイト判定（Canvasによる描画領域ピクセル計測）
+    const pad = Math.ceil(fontSize * 0.5);
+    const canvasW = Math.ceil(defaultW + pad * 2);
+    const canvasH = Math.ceil(defaultH + pad * 2);
+
+    measureCanvas.width = canvasW;
+    measureCanvas.height = canvasH;
+
+    measureCtx.clearRect(0, 0, canvasW, canvasH);
+    measureCtx.font = `${getEffectiveFontWeight()} ${fontSize}px ${getEffectiveFontFamily()}`;
+    measureCtx.fillStyle = '#ffffff';
+    measureCtx.textBaseline = 'top';
+    measureCtx.textAlign = 'left';
+
+    const drawX = pad;
+    const drawY = pad;
+    measureCtx.fillText(char, drawX, drawY);
+
+    const imgData = measureCtx.getImageData(0, 0, canvasW, canvasH);
+    const data = imgData.data;
+
+    let minX = canvasW, minY = canvasH, maxX = -1, maxY = -1;
+
+    for (let y = 0; y < canvasH; y++) {
+        for (let x = 0; x < canvasW; x++) {
+            const alpha = data[(y * canvasW + x) * 4 + 3];
+            if (alpha > 10) {
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+            }
+        }
+    }
+
+    if (maxX < minX || maxY < minY) {
+        return { w: defaultW, h: defaultH, offX: 0, offY: 0, isTight: false };
+    }
+
+    const tightW = maxX - minX + 1;
+    const tightH = maxY - minY + 1;
+    const offX = minX - drawX;
+    const offY = minY - drawY;
+
+    return { w: tightW, h: tightH, offX, offY, isTight: true };
 }
 
 function createCharBody(char, x, y, isStatic) {
@@ -373,7 +452,8 @@ function createCharBody(char, x, y, isStatic) {
     const fontSize = isLarge ? currentSettings.baseScale : (currentSettings.baseScale * currentSettings.smallRatio / 100);
     const size = measureChar(char, fontSize);
     
-    const heightDiff = measureChar('漢', currentSettings.baseScale).h - size.h;
+    const kanjiSize = measureChar('漢', currentSettings.baseScale);
+    const heightDiff = kanjiSize.h - size.h;
     const yOffset = isLarge ? 0 : (heightDiff / 2);
 
     const body = Bodies.rectangle(x, y + yOffset, size.w, size.h, {
@@ -385,16 +465,33 @@ function createCharBody(char, x, y, isStatic) {
 
     const elem = document.createElement('div');
     elem.className = 'physics-char';
-    elem.textContent = char;
-    elem.style.fontFamily = getEffectiveFontFamily();
-    elem.style.fontWeight = getEffectiveFontWeight();
-    elem.style.fontSize = fontSize + 'px';
-    elem.style.color = currentSettings.textColor;
     elem.style.width = size.w + 'px';
     elem.style.height = size.h + 'px';
-    elem.style.display = 'flex';
-    elem.style.alignItems = 'center';
-    elem.style.justifyContent = 'center';
+
+    if (size.isTight) {
+        elem.style.overflow = 'visible';
+        const inner = document.createElement('span');
+        inner.textContent = char;
+        inner.style.position = 'absolute';
+        inner.style.left = (-size.offX) + 'px';
+        inner.style.top = (-size.offY) + 'px';
+        inner.style.fontFamily = getEffectiveFontFamily();
+        inner.style.fontWeight = getEffectiveFontWeight();
+        inner.style.fontSize = fontSize + 'px';
+        inner.style.color = currentSettings.textColor;
+        inner.style.lineHeight = '1';
+        inner.style.whiteSpace = 'pre';
+        elem.appendChild(inner);
+    } else {
+        elem.textContent = char;
+        elem.style.fontFamily = getEffectiveFontFamily();
+        elem.style.fontWeight = getEffectiveFontWeight();
+        elem.style.fontSize = fontSize + 'px';
+        elem.style.color = currentSettings.textColor;
+        elem.style.display = 'flex';
+        elem.style.alignItems = 'center';
+        elem.style.justifyContent = 'center';
+    }
 
     document.getElementById('play-area').appendChild(elem);
     domElements.push({ body, elem, w: size.w, h: size.h });
